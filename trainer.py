@@ -31,7 +31,8 @@ USE_DIVERSITY_LOSS = False
 SAVE_EVERY = 2500
 EVALUATE_EVERY = 100
 
-CONDITION_ON_MAPPER= True
+CONDITION_ON_MAPPER = True
+
 
 class Trainer():
     def __init__(self, name, folder, image_size, batch_size=BATCH_SIZE, mixed_prob=0.9, gradient_accumulate_every=4,
@@ -39,6 +40,7 @@ class Trainer():
                  homogeneous_latent_space=HOMOGENEOUS_LATENT_SPACE, use_diversity_loss=USE_DIVERSITY_LOSS,
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
                  *args, **kwargs):
+        self.condition_on_mapper = condition_on_mapper
         self.folder = folder
         self.label_dim = len([subfolder for subfolder in os.listdir(folder)
                               if os.path.isdir(os.path.join(folder, subfolder))])
@@ -47,7 +49,7 @@ class Trainer():
 
         self.name = name
         self.GAN = StyleGAN2(lr=lr, image_size=image_size, label_dim=self.label_dim, channels=channels,
-                             condition_on_mapper=condition_on_mapper, *args, **kwargs)
+                             condition_on_mapper=self.condition_on_mapper, *args, **kwargs)
         self.GAN.cuda()
 
         self.batch_size = batch_size
@@ -92,7 +94,7 @@ class Trainer():
         batch_size = self.batch_size
 
         image_size = self.GAN.G.image_size
-        latent_dim = self.GAN.G.latent_dim
+        latent_dim = self.GAN.G.latent_dim if self.condition_on_mapper else self.GAN.G.latent_dim - self.label_dim
         num_layers = self.GAN.G.num_layers
 
         apply_gradient_penalty = self.steps % 4 == 0
@@ -115,7 +117,7 @@ class Trainer():
             w_space = latent_to_w(self.GAN.S, style, label_batch)
             w_styles = self.styles_def_to_tensor(w_space)
 
-            generated_images = self.GAN.G(w_styles, noise)
+            generated_images = self.GAN.G(w_styles, noise, label_batch)
             fake_output = self.GAN.D(generated_images.clone().detach(), label_batch)
 
             image_batch = image_batch.cuda()
@@ -157,7 +159,7 @@ class Trainer():
             w_space = latent_to_w(self.GAN.S, style, random_label)
             w_styles = self.styles_def_to_tensor(w_space)
 
-            generated_images = self.GAN.G(w_styles, noise)
+            generated_images = self.GAN.G(w_styles, noise, random_label)
             fake_output = self.GAN.D(generated_images, random_label)
             loss = fake_output.mean()
             gen_loss = loss
@@ -165,7 +167,7 @@ class Trainer():
             if self.homogeneous_latent_space and apply_path_penalty:
                 std = 0.1 / (w_styles.std(dim=0, keepdims=True) + EPS)
                 w_styles_2 = w_styles + torch.randn(w_styles.shape).cuda() / (std + EPS)
-                pl_images = self.GAN.G(w_styles_2, noise)
+                pl_images = self.GAN.G(w_styles_2, noise, random_label)
                 pl_lengths = ((pl_images - generated_images) ** 2).mean(dim=(1, 2, 3))
                 avg_pl_length = np.mean(pl_lengths.detach().cpu().numpy())
 
@@ -260,7 +262,7 @@ class Trainer():
                 latents = styles_def_to_tensor(latents)
             self.last_latents = latents  # for inspection purpose
 
-            generated_images = self.evaluate_in_chunks(self.batch_size, generator, latents, noise)
+            generated_images = self.evaluate_in_chunks(self.batch_size, generator, latents, noise, labels)
             generated_images.clamp_(0., 1.)
             return generated_images
 

@@ -48,10 +48,11 @@ class Dataset(data.Dataset):
         self.length = sum([len(path_keys) for path_keys in self.path_keys])
         assert self.length, f"Didn't find any picture inside {folder}"
 
-        self.transform = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                             transforms.Resize(image_size),
-                                             transforms.ToTensor()
-                                             ])
+        self.transform = transforms.Compose([
+            # transforms.RandomHorizontalFlip(),
+            transforms.Resize(image_size),
+            transforms.ToTensor()
+        ])
 
     def __len__(self):
         return self.length

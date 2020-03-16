@@ -94,7 +94,7 @@ class Generator(nn.Module):
             not_last = ind != (self.num_layers - 1)
 
             block = GeneratorBlock(
-                latent_dim,
+                self.latent_dim,
                 in_chan,
                 out_chan,
                 upsample=not_first,

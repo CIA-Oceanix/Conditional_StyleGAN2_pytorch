@@ -8,6 +8,12 @@ from trainer import Trainer
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=256 --batch_size=2 --gpu=1 --name=TenGeoP-SARwv_256 > nohup_gpu1.out &
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=128 --batch_size=8 --gpu=2 --name=TenGeoP-SARwv_128 > nohup_gpu2.out &
 # python run.py "E:\datasets\GochiUsa_128\train" --image_size=32 --batch_size=2 --name=GochiUsa_32
+# python run.py "E:\datasets\GochiUsa_128\train" --image_size=32 --batch_size=2 --name=GochiUsa_32 --condition_on_mapper=False
+# python run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --channels=1
+
+#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --homogenenous_latent_space=False --gpu=0  --batch_size=32 --channels=1 > nohup_gpu0.out &
+#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m_homogeneous --gpu=0   --batch_size=32 --channels=1 > nohup_gpu1.out &
+#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False -homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
 
 FOLDER = "E:\\datasets\\GochiUsa_128\\train"
 NAME = "default"
@@ -30,7 +36,7 @@ HOMOGENEOUS_LATENT_SPACE = True
 
 USE_DIVERSITY_LOSS = False
 
-SAVE_EVERY = 2500
+SAVE_EVERY = 500
 EVALUATE_EVERY = 100
 
 CONDITIONS_ON_MAPPER = True
