@@ -1,8 +1,16 @@
 import os
 import fire
 from tqdm import tqdm
+import json
+from pathlib import Path
 
 from trainer import Trainer
+
+from config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
+    GRADIENT_BATCH_SIZE, NETWORK_CAPACITY, NUM_TRAIN_STEPS, LEARNING_RATE, \
+    PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, \
+    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR
+
 
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=512 --batch_size=1 --gpu=0 --name=TenGeoP-SARwv_512 > nohup_gpu0.out &
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=256 --batch_size=2 --gpu=1 --name=TenGeoP-SARwv_256 > nohup_gpu1.out &
@@ -13,36 +21,13 @@ from trainer import Trainer
 
 #  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --homogenenous_latent_space=False --gpu=0  --batch_size=32 --channels=1 > nohup_gpu0.out &
 #  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m_homogeneous --gpu=0   --batch_size=32 --channels=1 > nohup_gpu1.out &
-#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False -homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
+#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
 
-FOLDER = "E:\\datasets\\GochiUsa_128\\train"
-NAME = "default"
-NEW = True
-LOAD_FROM = -1
-GPU = '0'
+#  nohup python3.6 run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
 
-IMAGE_SIZE = 64
-CHANNELS = 3
-
-GPU_BATCH_SIZE = 4
-GRADIENT_BATCH_SIZE = 128
-
-NETWORK_CAPACITY = 16
-NUM_TRAIN_STEPS = 10 ** 6
-LEARNING_RATE = 2e-4
-
-PATH_LENGTH_REGULIZER_FREQUENCY = 32
-HOMOGENEOUS_LATENT_SPACE = True
-
-USE_DIVERSITY_LOSS = False
-
-SAVE_EVERY = 500
-EVALUATE_EVERY = 100
-
-CONDITIONS_ON_MAPPER = True
 
 def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, image_size=IMAGE_SIZE,
-                      batch_size=GPU_BATCH_SIZE, gradient_batch_size=GRADIENT_BATCH_SIZE,
+                      gpu_batch_size=GPU_BATCH_SIZE, gradient_batch_size=GRADIENT_BATCH_SIZE,
                       network_capacity=NETWORK_CAPACITY, num_train_steps=NUM_TRAIN_STEPS,
                       learning_rate=LEARNING_RATE, gpu=GPU, channels=CHANNELS,
                       path_length_regulizer_frequency=PATH_LENGTH_REGULIZER_FREQUENCY,
@@ -50,7 +35,7 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                       use_diversity_loss=USE_DIVERSITY_LOSS,
                       save_every=SAVE_EVERY,
                       evaluate_every=EVALUATE_EVERY,
-                      condition_on_mapper=CONDITIONS_ON_MAPPER):
+                      condition_on_mapper=CONDITION_ON_MAPPER):
     """
     Train the conditional stylegan model on the data contained in a folder.
 
@@ -64,8 +49,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type load_from: int, optional
     :param image_size: size of the picture to generate.
     :type image_size: int, optional
-    :param batch_size: size of the batch to enter the GPU.
-    :type batch_size: str, optional
+    :param gpu_batch_size: size of the batch to enter the GPU.
+    :type gpu_batch_size: str, optional
     :param gradient_batch_size: size of the batch on which we compute the gradient.
     :type gradient_batch_size: int, optional
     :param network_capacity: basis for the number of filters.
@@ -92,23 +77,36 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type condition_on_mapper: bool, optional
     :return:
     """
-    gradient_accumulate_every = gradient_batch_size // batch_size
+    gradient_accumulate_every = gradient_batch_size // gpu_batch_size
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
-    model = Trainer(name, folder, batch_size=batch_size, gradient_accumulate_every=gradient_accumulate_every,
-                    image_size=image_size, network_capacity=network_capacity, lr=learning_rate, channels=channels,
-                    path_length_regulizer_frequency=path_length_regulizer_frequency,
-                    homogeneous_latent_space=homogeneous_latent_space,
-                    use_diversity_loss=use_diversity_loss,
-                    save_every=save_every,
-                    evaluate_every=evaluate_every,
-                    condition_on_mapper=condition_on_mapper
-                    )
+
+    json_path = Path(MODELS_DIR / name / 'config.json')
+    os.makedirs(Path(MODELS_DIR / name), exist_ok=True)
+    if not new and os.path.exists(json_path):
+        with open(json_path, 'r') as file:
+            config = json.load(file)
+    else:
+        config = {'name': name,
+                  'folder': folder,
+                  'batch_size': gpu_batch_size,
+                  'gradient_accumulate_every': gradient_accumulate_every,
+                  'image_size': image_size,
+                  'network_capacity': network_capacity,
+                  'lr': learning_rate,
+                  'channels': channels,
+                  'path_length_regulizer_frequency': path_length_regulizer_frequency,
+                  'homogeneous_latent_space': homogeneous_latent_space,
+                  'use_diversity_loss': use_diversity_loss,
+                  'save_every': save_every,
+                  'evaluate_every': evaluate_every,
+                  'condition_on_mapper': condition_on_mapper
+                  }
+        with open(json_path, 'w') as file:
+            json.dump(config, file, indent=4, sort_keys=True)
+    model = Trainer(**config)
 
     if not new:
         model.load(load_from)
-        with open(f'model{load_from}', 'wb') as test_file:
-            import pickle
-            pickle.dump(model, test_file, protocol=4)
     else:
         model.clear()
 

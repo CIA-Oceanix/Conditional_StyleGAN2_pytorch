@@ -6,16 +6,7 @@ import torch.nn.functional as F
 from torch_optimizer import DiffGrad
 
 from misc import EMA, set_requires_grad
-from config import EPS
-
-LATENT_DIM = 512
-STYLE_DEPTH = 8
-NETWORK_CAPACITY = 16
-LEARNING_RATE = 2e-4
-CHANNELS = 1
-
-CONDITION_ON_MAPPER = True
-
+from config import EPS, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, CONDITION_ON_MAPPER
 
 class StyleGAN2(nn.Module):
     def __init__(self, image_size, label_dim, latent_dim=LATENT_DIM, style_depth=STYLE_DEPTH,

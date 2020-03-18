@@ -13,7 +13,7 @@ from config import EXTS
 
 def cycle(iterable):
     """
-    Transform a iterable into a generator.
+    Transform an iterable into a generator.
     """
     while True:
         for i in iterable:

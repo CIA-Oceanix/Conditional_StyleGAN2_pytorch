@@ -3,7 +3,6 @@ from random import random
 from shutil import rmtree
 from pathlib import Path
 import numpy as np
-import pickle
 
 import torch
 from torch.utils import data
@@ -14,28 +13,14 @@ import torchvision
 from dataset import cycle, Dataset
 from StyleGAN2 import StyleGAN2
 from misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
-    evaluate_in_chunks, styles_def_to_tensor, EMA, get_random_labels
+    evaluate_in_chunks, styles_def_to_tensor, EMA
 
-from config import RESULTS_DIR, MODELS_DIR, EPS, LOG_FILENAME
-
-# constants
-
-BATCH_SIZE = 64
-LEARNING_RATE = 2e-4
-CHANNELS = 1
-
-PATH_LENGTH_REGULIZER_FREQUENCY = 32
-HOMOGENEOUS_LATENT_SPACE = True
-USE_DIVERSITY_LOSS = False
-
-SAVE_EVERY = 2500
-EVALUATE_EVERY = 100
-
-CONDITION_ON_MAPPER = True
-
+from config import RESULTS_DIR, MODELS_DIR, EPS, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, CHANNELS, \
+    PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, \
+    CONDITION_ON_MAPPER
 
 class Trainer():
-    def __init__(self, name, folder, image_size, batch_size=BATCH_SIZE, mixed_prob=0.9, gradient_accumulate_every=4,
+    def __init__(self, name, folder, image_size, batch_size=GPU_BATCH_SIZE, mixed_prob=0.9, gradient_accumulate_every=4,
                  lr=LEARNING_RATE, channels=CHANNELS, path_length_regulizer_frequency=PATH_LENGTH_REGULIZER_FREQUENCY,
                  homogeneous_latent_space=HOMOGENEOUS_LATENT_SPACE, use_diversity_loss=USE_DIVERSITY_LOSS,
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
@@ -232,7 +217,8 @@ class Trainer():
 
         if latents_to_evaluate is None:
             if self.latents_to_evaluate is None or reset:
-                self.latents_to_evaluate = noise_list(num_rows * num_cols, self.GAN.G.num_layers, self.GAN.G.latent_dim)
+                latent_dim = self.GAN.G.latent_dim if self.condition_on_mapper else self.GAN.G.latent_dim - self.label_dim
+                self.latents_to_evaluate = noise_list(num_rows * num_cols, self.GAN.G.num_layers, latent_dim)
         else:
             self.latents_to_evaluate = latents_to_evaluate
 
@@ -304,13 +290,12 @@ class Trainer():
         (MODELS_DIR / self.name).mkdir(parents=True, exist_ok=True)
 
     def clear(self):
-        rmtree(f'./models/{self.name}/')
-        rmtree(f'./results/{self.name}/')
+        rmtree(RESULTS_DIR / self.name)
+        rmtree(MODELS_DIR / self.name)
         self.init_folders()
 
     def save(self, num):
-        with open(self.model_name(num), 'wb') as file:
-            pickle.dump(self, file, protocol=4)
+        torch.save(self.GAN.state_dict(), self.model_name(num))
 
     def load(self, num=-1):
         name = num
@@ -323,12 +308,3 @@ class Trainer():
             print(f'Continuing from previous epoch - {name}')
         self.steps = name * self.save_every
         self.GAN.load_state_dict(torch.load(self.model_name(name)))
-
-    def __getstate__(self):
-        def should_pickle(key):
-            accepted_keys = ['GAN', 'label_dim', 'name', 'labels_to_evaluate', 'noise_to_evaluate',
-                             'latents_to_evaluate', 'folder', 'batch_size', 'evaluate_in_chunks',
-                             'styles_def_to_tensor', "steps"]
-            return True if key in accepted_keys else False
-
-        return dict((key, value) for (key, value) in self.__dict__.items() if should_pickle(key))
