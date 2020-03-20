@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch_optimizer import DiffGrad
 
 from misc import EMA, set_requires_grad
-from config import EPS, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, CONDITION_ON_MAPPER
+from config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, CONDITION_ON_MAPPER
 
 class StyleGAN2(nn.Module):
     def __init__(self, image_size, label_dim, latent_dim=LATENT_DIM, style_depth=STYLE_DEPTH,
@@ -239,7 +239,7 @@ class Conv2DMod(nn.Module):
         weights = w2 * (w1 + 1)
 
         if self.demod:
-            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdims=True) + EPS)
+            d = torch.rsqrt((weights ** 2).sum(dim=(2, 3, 4), keepdims=True) + EPSILON)
             weights = weights * d
 
         x = x.reshape(1, -1, h, w)

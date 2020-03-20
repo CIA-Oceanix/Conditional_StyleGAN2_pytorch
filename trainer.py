@@ -15,15 +15,18 @@ from StyleGAN2 import StyleGAN2
 from misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
     evaluate_in_chunks, styles_def_to_tensor, EMA
 
-from config import RESULTS_DIR, MODELS_DIR, EPS, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, CHANNELS, \
+from config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, CHANNELS, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, \
-    CONDITION_ON_MAPPER
+    CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD
+
 
 class Trainer():
-    def __init__(self, name, folder, image_size, batch_size=GPU_BATCH_SIZE, mixed_prob=0.9, gradient_accumulate_every=4,
+    def __init__(self, name, folder, image_size, batch_size=GPU_BATCH_SIZE, mixed_prob=MIXED_PROBABILITY,
                  lr=LEARNING_RATE, channels=CHANNELS, path_length_regulizer_frequency=PATH_LENGTH_REGULIZER_FREQUENCY,
                  homogeneous_latent_space=HOMOGENEOUS_LATENT_SPACE, use_diversity_loss=USE_DIVERSITY_LOSS,
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
+                 gradient_accumulate_every=GRADIENT_ACCUMULATE_EVERY, moving_average_start=MOVING_AVERAGE_START,
+                 moving_average_period=MOVING_AVERAGE_PERIOD,
                  *args, **kwargs):
         self.condition_on_mapper = condition_on_mapper
         self.folder = folder
@@ -45,7 +48,9 @@ class Trainer():
         self.evaluate_every = evaluate_every
 
         self.av = None
-        self.pl_mean = 0
+        self.path_length_mean = 0
+        self.moving_average_start = moving_average_start
+        self.moving_average_period = moving_average_period
 
         self.dataset = Dataset(folder, image_size)
         self.loader = cycle(data.DataLoader(self.dataset, num_workers=0, batch_size=batch_size,
@@ -56,7 +61,7 @@ class Trainer():
         self.g_loss = 0
         self.last_gp_loss = 0
 
-        self.pl_length_ma = EMA(0.99)
+        self.path_length_moving_average = EMA(0.99)
         self.path_length_regulizer_frequency = path_length_regulizer_frequency
         self.homogeneous_latent_space = homogeneous_latent_space
         self.use_diversity_loss = use_diversity_loss
@@ -87,7 +92,7 @@ class Trainer():
 
         # train discriminator
 
-        avg_pl_length = self.pl_mean
+        average_path_length = self.path_length_mean
         self.GAN.D_opt.zero_grad()
         inputs = []
 
@@ -132,7 +137,7 @@ class Trainer():
             labels = np.array([np.eye(self.label_dim)[np.random.randint(self.label_dim)]
                                for _ in range(8 * self.label_dim)])
             self.set_evaluation_parameters(labels_to_evaluate=labels, reset=True)
-            generated_images, average_generated_images = self.evaluate()
+            self.evaluate()
             w = self.last_latents.cpu().data.numpy()
             w_std = np.mean(np.abs(0.25 - w.std(axis=0)))
         else:
@@ -147,22 +152,22 @@ class Trainer():
             generated_images = self.GAN.G(w_styles, noise, random_label)
             fake_output = self.GAN.D(generated_images, random_label)
             loss = fake_output.mean()
-            gen_loss = loss
+            generator_loss = loss
 
             if self.homogeneous_latent_space and apply_path_penalty:
-                std = 0.1 / (w_styles.std(dim=0, keepdims=True) + EPS)
-                w_styles_2 = w_styles + torch.randn(w_styles.shape).cuda() / (std + EPS)
-                pl_images = self.GAN.G(w_styles_2, noise, random_label)
-                pl_lengths = ((pl_images - generated_images) ** 2).mean(dim=(1, 2, 3))
-                avg_pl_length = np.mean(pl_lengths.detach().cpu().numpy())
+                std = 0.1 / (w_styles.std(dim=0, keepdims=True) + EPSILON)
+                w_styles_2 = w_styles + torch.randn(w_styles.shape).cuda() / (std + EPSILON)
+                path_length_images = self.GAN.G(w_styles_2, noise, random_label)
+                path_lengths = ((path_length_images - generated_images) ** 2).mean(dim=(1, 2, 3))
+                average_path_length = np.mean(path_lengths.detach().cpu().numpy())
 
-                if self.pl_mean is not None:
-                    pl_loss = ((pl_lengths - self.pl_mean) ** 2).mean()
-                    if not torch.isnan(pl_loss):
-                        gen_loss = gen_loss + pl_loss
+                if self.path_length_mean is not None:
+                    path_length_loss = ((path_lengths - self.path_length_mean) ** 2).mean()
+                    if not torch.isnan(path_length_loss):
+                        generator_loss = generator_loss + path_length_loss
 
-            gen_loss = (gen_loss + w_std) / self.gradient_accumulate_every
-            gen_loss.backward()
+            generator_loss = (generator_loss + w_std) / self.gradient_accumulate_every
+            generator_loss.backward()
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
 
         self.g_loss = float(total_gen_loss)
@@ -170,10 +175,11 @@ class Trainer():
 
         # calculate moving averages
 
-        if apply_path_penalty and not np.isnan(avg_pl_length):
-            self.pl_mean = self.pl_length_ma.update_average(self.pl_mean, avg_pl_length)
+        if apply_path_penalty and not np.isnan(average_path_length):
+            self.path_length_mean = self.path_length_moving_average.update_average(self.path_length_mean,
+                                                                                   average_path_length)
 
-        if self.steps % 1000 == 0 and self.steps > 20000:
+        if self.steps % self.moving_average_period == 0 and self.steps > self.moving_avering_start:
             self.GAN.EMA()
 
         if self.steps <= 25000 and self.steps % 1000 == 2:
@@ -272,7 +278,7 @@ class Trainer():
                   for image in images]
         images = images[:len(images) // nrows * nrows]
         torchvision.utils.save_image(images, reals_filename, nrow=len(images) // nrows)
-        print(f'Mosaic of real images created at {reals_filename}\n')
+        print(f'\nMosaic of real images created at {reals_filename}\n')
 
     def print_log(self, batch_id):
         if batch_id == 0:
@@ -280,7 +286,7 @@ class Trainer():
                 file.write('G;D;GP;PL\n')
         else:
             with open(LOG_FILENAME, 'a') as file:
-                file.write(f'{self.g_loss:.2f};{self.d_loss:.2f};{self.last_gp_loss:.2f};{self.pl_mean:.2f}\n')
+                file.write(f'{self.g_loss:.2f};{self.d_loss:.2f};{self.last_gp_loss:.2f};{self.path_length_mean:.2f}\n')
 
     def model_name(self, num):
         return str(MODELS_DIR / self.name / f'model_{num}.pt')

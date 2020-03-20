@@ -19,9 +19,13 @@ from config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_
 # python run.py "E:\datasets\GochiUsa_128\train" --image_size=32 --batch_size=2 --name=GochiUsa_32 --condition_on_mapper=False
 # python run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --channels=1
 
-#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --homogenenous_latent_space=False --gpu=0  --batch_size=32 --channels=1 > nohup_gpu0.out &
-#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m_homogeneous --gpu=0   --batch_size=32 --channels=1 > nohup_gpu1.out &
-#  nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/mnist/train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
+#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_m --homogenenous_latent_space=False --gpu=0  --gpu_batch_size=8 --channels=1
+#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_m_homogeneous --gpu=0   --gpu_batch_size=8 --channels=1
+#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --gpu_batch_size=8 --channels=1
+
+#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_m --homogenenous_latent_space=False --gpu=0  --gpu_batch_size=4 --channels=3
+#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_m_homogeneous --gpu=0   --gpu_batch_size=4 --channels=3
+#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --gpu_batch_size=4 --channels=3
 
 #  nohup python3.6 run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
 
@@ -101,14 +105,14 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                   'evaluate_every': evaluate_every,
                   'condition_on_mapper': condition_on_mapper
                   }
-        with open(json_path, 'w') as file:
-            json.dump(config, file, indent=4, sort_keys=True)
     model = Trainer(**config)
 
     if not new:
         model.load(load_from)
     else:
         model.clear()
+    with open(json_path, 'w') as file:
+        json.dump(config, file, indent=4, sort_keys=True)
 
     for batch_id in tqdm(range(num_train_steps - model.steps), ncols=60):
         model.train()

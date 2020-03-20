@@ -5,7 +5,7 @@ import pickle
 
 
 def generate(mapper_input=None, labels=None, noises=None, use_mapper=True):
-    with open('tset.pkl', 'rb') as test_file:
+    with open('test.pkl', 'rb') as test_file:
         model = pickle.load(test_file)
 
     for i in range(model.label_dim + 1):
