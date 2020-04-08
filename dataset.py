@@ -8,7 +8,7 @@ from torchvision import transforms
 
 from PIL import Image
 
-from config import EXTS
+from CStyleGAN2_pytorch.config import EXTS
 
 
 def cycle(iterable):

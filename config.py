@@ -12,6 +12,7 @@ NETWORK_CAPACITY = 16
 STYLE_DEPTH = 8
 IMAGE_SIZE = 64
 LATENT_DIM = 512
+USE_BIASES = True
 
 EXTS = ['jpg', 'png']
 FOLDER = "E:\\datasets\\GochiUsa_128\\train"

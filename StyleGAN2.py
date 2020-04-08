@@ -5,13 +5,15 @@ from torch import nn
 import torch.nn.functional as F
 from torch_optimizer import DiffGrad
 
-from misc import EMA, set_requires_grad
-from config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, CONDITION_ON_MAPPER
+from CStyleGAN2_pytorch.misc import EMA, set_requires_grad
+from CStyleGAN2_pytorch.config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, \
+    CONDITION_ON_MAPPER, USE_BIASES
+
 
 class StyleGAN2(nn.Module):
     def __init__(self, image_size, label_dim, latent_dim=LATENT_DIM, style_depth=STYLE_DEPTH,
                  network_capacity=NETWORK_CAPACITY, steps=1, lr=LEARNING_RATE, channels=CHANNELS,
-                 condition_on_mapper=CONDITION_ON_MAPPER):
+                 condition_on_mapper=CONDITION_ON_MAPPER, use_biases=USE_BIASES):
         super().__init__()
         self.condition_on_mapper = condition_on_mapper
         self.lr = lr
@@ -23,7 +25,8 @@ class StyleGAN2(nn.Module):
                            condition_on_mapper=self.condition_on_mapper)
         self.D = Discriminator(image_size, label_dim, network_capacity=network_capacity, channels=channels)
 
-        self.SE = StyleVectorizer(latent_dim, label_dim, style_depth, condition_on_mapper=self.condition_on_mapper)
+        self.SE = StyleVectorizer(latent_dim, label_dim, style_depth, condition_on_mapper=self.condition_on_mapper,
+                                  use_biases=use_biases)
         self.GE = Generator(image_size, latent_dim, label_dim, network_capacity, channels=channels,
                             condition_on_mapper=self.condition_on_mapper)
 
@@ -255,15 +258,15 @@ class Conv2DMod(nn.Module):
 
 
 class StyleVectorizer(nn.Module):
-    def __init__(self, emb, label_dim, depth, condition_on_mapper=CONDITION_ON_MAPPER):
+    def __init__(self, emb, label_dim, depth, condition_on_mapper=CONDITION_ON_MAPPER, use_biases=USE_BIASES):
         super().__init__()
         self.condition_on_mapper = condition_on_mapper
 
         layers = []
         input_shape = (emb + label_dim) if self.condition_on_mapper else emb
-        layers.extend([nn.Linear(input_shape, emb), leaky_relu(0.2)])
+        layers.extend([nn.Linear(input_shape, emb, bias=use_biases), leaky_relu(0.2)])
         for i in range(1, depth):
-            layers.extend([nn.Linear(emb, emb), leaky_relu(0.2)])
+            layers.extend([nn.Linear(emb, emb, bias=use_biases), leaky_relu(0.2)])
         self.label_dim = label_dim
         self.net = nn.Sequential(*layers)
 

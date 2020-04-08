@@ -4,12 +4,12 @@ from tqdm import tqdm
 import json
 from pathlib import Path
 
-from trainer import Trainer
+from CStyleGAN2_pytorch.trainer import Trainer
 
-from config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
+from CStyleGAN2_pytorch.config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
     GRADIENT_BATCH_SIZE, NETWORK_CAPACITY, NUM_TRAIN_STEPS, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, \
-    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR
+    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES
 
 
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=512 --batch_size=1 --gpu=0 --name=TenGeoP-SARwv_512 > nohup_gpu0.out &
@@ -39,7 +39,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                       use_diversity_loss=USE_DIVERSITY_LOSS,
                       save_every=SAVE_EVERY,
                       evaluate_every=EVALUATE_EVERY,
-                      condition_on_mapper=CONDITION_ON_MAPPER):
+                      condition_on_mapper=CONDITION_ON_MAPPER,
+                      use_biases=USE_BIASES):
     """
     Train the conditional stylegan model on the data contained in a folder.
 
@@ -77,8 +78,10 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type save_every: int, optional
     :param evaluate_every: number of (gradient) batch after which we evaluate the network
     :type evaluate_every: int, optional
-    :param condition_on_mapper: whether to use the conditions in the mapper or the generator
+    :param condition_on_mapper: wether to use the conditions in the mapper or the generator
     :type condition_on_mapper: bool, optional
+    :param use_biases: wether to use biases in the mapper or not
+    :type use_biases: bool, optional
     :return:
     """
     gradient_accumulate_every = gradient_batch_size // gpu_batch_size
@@ -103,7 +106,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                   'use_diversity_loss': use_diversity_loss,
                   'save_every': save_every,
                   'evaluate_every': evaluate_every,
-                  'condition_on_mapper': condition_on_mapper
+                  'condition_on_mapper': condition_on_mapper,
+                  'use_biases': use_biases
                   }
     model = Trainer(**config)
 

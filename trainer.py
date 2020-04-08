@@ -10,14 +10,15 @@ import torch.nn.functional as F
 
 import torchvision
 
-from dataset import cycle, Dataset
-from StyleGAN2 import StyleGAN2
-from misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
+from CStyleGAN2_pytorch.dataset import cycle, Dataset
+from CStyleGAN2_pytorch.StyleGAN2 import StyleGAN2
+from CStyleGAN2_pytorch.misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
     evaluate_in_chunks, styles_def_to_tensor, EMA
 
-from config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, CHANNELS, \
-    PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, \
-    CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD
+from CStyleGAN2_pytorch.config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, \
+    PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, CHANNELS, \
+    CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD, \
+    USE_BIASES
 
 
 class Trainer():
@@ -26,7 +27,7 @@ class Trainer():
                  homogeneous_latent_space=HOMOGENEOUS_LATENT_SPACE, use_diversity_loss=USE_DIVERSITY_LOSS,
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
                  gradient_accumulate_every=GRADIENT_ACCUMULATE_EVERY, moving_average_start=MOVING_AVERAGE_START,
-                 moving_average_period=MOVING_AVERAGE_PERIOD,
+                 moving_average_period=MOVING_AVERAGE_PERIOD, use_biases=USE_BIASES,
                  *args, **kwargs):
         self.condition_on_mapper = condition_on_mapper
         self.folder = folder
@@ -179,11 +180,10 @@ class Trainer():
             self.path_length_mean = self.path_length_moving_average.update_average(self.path_length_mean,
                                                                                    average_path_length)
 
-        if self.steps % self.moving_average_period == 0 and self.steps > self.moving_avering_start:
-            self.GAN.EMA()
-
-        if self.steps <= 25000 and self.steps % 1000 == 2:
+        if self.steps == self.moving_average_start:
             self.GAN.reset_parameter_averaging()
+        if self.steps % self.moving_average_period == 0 and self.steps > self.moving_average_start:
+            self.GAN.EMA()
 
         if not self.steps % self.save_every:
             self.save(self.steps // self.save_every)
@@ -198,7 +198,7 @@ class Trainer():
         self.av = None
 
     def set_evaluation_parameters(self, latents_to_evaluate=None, noise_to_evaluate=None, labels_to_evaluate=None,
-                                  num_rows='labels', num_cols=8, reset=False):
+                                  num_rows='labels', num_cols=8, reset=False, total=None):
         """
         Set the latent vectors, the noises and the labels to evaluate, convert them to tensor, cuda and float if needed
 
@@ -217,20 +217,26 @@ class Trainer():
         :param num_cols: number of columns in the generated mosaic.
                          Only needed to compute the size of other parameters when they are at None.
         :type num_cols: int, optional, default at 8
+        :param total: bypass the num_cols and num_rows to choose the total number of imgs
+        :type total: int, optional, default is None
         """
         if num_rows == 'labels':
             num_rows = self.label_dim
+        if num_cols == 'labels':
+            num_cols = self.label_dim
+        if total is None:
+            total = num_cols * num_rows
 
         if latents_to_evaluate is None:
             if self.latents_to_evaluate is None or reset:
                 latent_dim = self.GAN.G.latent_dim if self.condition_on_mapper else self.GAN.G.latent_dim - self.label_dim
-                self.latents_to_evaluate = noise_list(num_rows * num_cols, self.GAN.G.num_layers, latent_dim)
+                self.latents_to_evaluate = noise_list(total, self.GAN.G.num_layers, latent_dim)
         else:
             self.latents_to_evaluate = latents_to_evaluate
 
         if noise_to_evaluate is None:
             if self.noise_to_evaluate is None or reset:
-                self.noise_to_evaluate = image_noise(num_rows * num_cols, self.GAN.G.image_size)
+                self.noise_to_evaluate = image_noise(total, self.GAN.G.image_size)
         else:
             self.noise_to_evaluate = noise_to_evaluate
         if isinstance(self.latents_to_evaluate, np.ndarray):
@@ -238,7 +244,7 @@ class Trainer():
 
         if labels_to_evaluate is None:
             if self.labels_to_evaluate is None or reset:
-                self.labels_to_evaluate = np.array([np.eye(num_rows)[i % num_rows] for i in range(num_rows * num_cols)])
+                self.labels_to_evaluate = np.array([np.eye(num_rows)[i % num_rows] for i in range(total)])
         else:
             self.labels_to_evaluate = labels_to_evaluate
         if isinstance(self.labels_to_evaluate, np.ndarray):
@@ -288,8 +294,10 @@ class Trainer():
             with open(LOG_FILENAME, 'a') as file:
                 file.write(f'{self.g_loss:.2f};{self.d_loss:.2f};{self.last_gp_loss:.2f};{self.path_length_mean:.2f}\n')
 
-    def model_name(self, num):
-        return str(MODELS_DIR / self.name / f'model_{num}.pt')
+    def model_name(self, num, root=MODELS_DIR):
+        if isinstance(root, str):
+            root = Path(root)
+        return str(root / self.name / f'model_{num}.pt')
 
     def init_folders(self):
         (RESULTS_DIR / self.name).mkdir(parents=True, exist_ok=True)
@@ -303,14 +311,16 @@ class Trainer():
     def save(self, num):
         torch.save(self.GAN.state_dict(), self.model_name(num))
 
-    def load(self, num=-1):
+    def load(self, num=-1, root=MODELS_DIR):
+        if isinstance(root, str):
+            root = Path(root)
         name = num
         if num == -1:
-            file_paths = [p for p in Path(MODELS_DIR / self.name).glob('model_*.pt')]
+            file_paths = [p for p in Path(root / self.name).glob('model_*.pt')]
             saved_nums = sorted(map(lambda x: int(x.stem.split('_')[1]), file_paths))
             if len(saved_nums) == 0:
                 return
             name = saved_nums[-1]
             print(f'Continuing from previous epoch - {name}')
         self.steps = name * self.save_every
-        self.GAN.load_state_dict(torch.load(self.model_name(name)))
+        self.GAN.load_state_dict(torch.load(self.model_name(name, root=root)))
