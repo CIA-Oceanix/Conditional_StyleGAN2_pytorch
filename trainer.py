@@ -18,7 +18,7 @@ from CStyleGAN2_pytorch.misc import gradient_penalty, image_noise, noise_list, m
 from CStyleGAN2_pytorch.config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, CHANNELS, \
     CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD, \
-    USE_BIASES
+    USE_BIASES, LABEL_EPSILON
 
 
 class Trainer():
@@ -27,7 +27,7 @@ class Trainer():
                  homogeneous_latent_space=HOMOGENEOUS_LATENT_SPACE, use_diversity_loss=USE_DIVERSITY_LOSS,
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
                  gradient_accumulate_every=GRADIENT_ACCUMULATE_EVERY, moving_average_start=MOVING_AVERAGE_START,
-                 moving_average_period=MOVING_AVERAGE_PERIOD, use_biases=USE_BIASES,
+                 moving_average_period=MOVING_AVERAGE_PERIOD, use_biases=USE_BIASES, label_epsilon=LABEL_EPSILON,
                  *args, **kwargs):
         self.condition_on_mapper = condition_on_mapper
         self.folder = folder
@@ -38,7 +38,9 @@ class Trainer():
 
         self.name = name
         self.GAN = StyleGAN2(lr=lr, image_size=image_size, label_dim=self.label_dim, channels=channels,
-                             condition_on_mapper=self.condition_on_mapper, *args, **kwargs)
+                             condition_on_mapper=self.condition_on_mapper, label_epsilon=label_epsilon,
+                             use_biases=use_biases,
+                             *args, **kwargs)
         self.GAN.cuda()
 
         self.batch_size = batch_size
@@ -251,13 +253,17 @@ class Trainer():
             self.labels_to_evaluate = torch.from_numpy(self.labels_to_evaluate).cuda().float()
 
     @torch.no_grad()
-    def evaluate(self, use_mapper=True):
+    def evaluate(self, use_mapper=True, truncation_trick=1):
         self.GAN.eval()
 
-        def generate_images(stylizer, generator, latents, noise, labels):
+        def generate_images(stylizer, generator, latents, noise, labels, truncation_trick=1):
             if use_mapper:
                 latents = latent_to_w(stylizer, latents, labels)
                 latents = styles_def_to_tensor(latents)
+                
+                latents_mean = torch.mean(latents, dim=(1,2))
+                latents =  truncation_trick*(latents - latents_mean[:, None, None]) + latents_mean[:, None, None]
+                
             self.last_latents = latents  # for inspection purpose
 
             generated_images = self.evaluate_in_chunks(self.batch_size, generator, latents, noise, labels)
@@ -265,10 +271,11 @@ class Trainer():
             return generated_images
 
         generated_images = generate_images(self.GAN.S, self.GAN.G,
-                                           self.latents_to_evaluate, self.noise_to_evaluate, self.labels_to_evaluate)
+                                           self.latents_to_evaluate, self.noise_to_evaluate, self.labels_to_evaluate,
+                                           truncation_trick=truncation_trick)
         average_generated_images = generate_images(self.GAN.SE, self.GAN.GE,
                                                    self.latents_to_evaluate, self.noise_to_evaluate,
-                                                   self.labels_to_evaluate)
+                                                   self.labels_to_evaluate, truncation_trick=truncation_trick)
         return generated_images, average_generated_images
 
     def save_images(self, generated_images, filename):

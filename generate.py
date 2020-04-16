@@ -1,35 +1,27 @@
 import os
+import json
 import fire
 import numpy as np
-import pickle
+from CStyleGAN2_pytorch.trainer import Trainer
+import torchvision
+
+root = 'models'
+name = "GochiUsa64_with_bias"
+
+def generate(mapper_input=None, labels=None, noises=None, use_mapper=True,truncation_trick=1.):
+    with open(os.path.join(root, name, 'config.json'), 'r') as file:
+        config = json.load(file)
+        config['folder'] = config['folder'].replace("/homelocal/gpu1/pyve/acolin/data",
+                                                   "E:\datasets").replace('/datasets/GochiUsa_128/GochiUsa_128', 
+                                                                          'E:\\datasets\\GochiUsaV2\\train')
+    model = Trainer(**config)
+    model.load(-1, root=root)
 
 
-def generate(mapper_input=None, labels=None, noises=None, use_mapper=True):
-    with open('test.pkl', 'rb') as test_file:
-        model = pickle.load(test_file)
-
-    for i in range(model.label_dim + 1):
-        if i == model.label_dim:
-            print(f'Overall')
-            labels = None
-        else:
-            print(f'For label {i}')
-            labels = np.array([np.eye(model.label_dim)[i] for _ in range(64)])
-
-        model.set_evaluation_parameters(labels_to_evaluate=labels, reset=True)
-
-        y = np.stack([x.cpu().data.numpy() for x, i in model.latents_to_evaluate])[0]
-        y_std = np.mean(np.abs(y.std(axis=0)))
-
-        generated_images, average_generated_images = model.evaluate(use_mapper=use_mapper)
-        w = model.last_latents.cpu().data.numpy()
-        w_std = np.mean(np.abs(w.std(axis=0)))
-
-        x = generated_images.cpu().data.numpy()
-        x_std = np.mean(np.abs(x.std(axis=0)))
-
-        print(f"y_std: {y_std}, w_std:{w_std}, x_std:{x_std}")
-
+    model.set_evaluation_parameters(labels_to_evaluate=None, reset=True, total=64)
+    generated_images, average_generated_images = model.evaluate(use_mapper=use_mapper,truncation_trick=truncation_trick)
+    
+    torchvision.utils.save_image(average_generated_images, 'test.png', nrow=model.label_dim)
 
 if __name__ == "__main__":
     fire.Fire(generate)

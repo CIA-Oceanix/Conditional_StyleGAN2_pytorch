@@ -7,28 +7,29 @@ from torch_optimizer import DiffGrad
 
 from CStyleGAN2_pytorch.misc import EMA, set_requires_grad
 from CStyleGAN2_pytorch.config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, \
-    CONDITION_ON_MAPPER, USE_BIASES
+    CONDITION_ON_MAPPER, USE_BIASES, LABEL_EPSILON
 
 
 class StyleGAN2(nn.Module):
     def __init__(self, image_size, label_dim, latent_dim=LATENT_DIM, style_depth=STYLE_DEPTH,
                  network_capacity=NETWORK_CAPACITY, steps=1, lr=LEARNING_RATE, channels=CHANNELS,
-                 condition_on_mapper=CONDITION_ON_MAPPER, use_biases=USE_BIASES):
+                 condition_on_mapper=CONDITION_ON_MAPPER, use_biases=USE_BIASES, label_epsilon=LABEL_EPSILON):
         super().__init__()
         self.condition_on_mapper = condition_on_mapper
         self.lr = lr
         self.steps = steps
         self.ema_updater = EMA(0.99)
 
-        self.S = StyleVectorizer(latent_dim, label_dim, style_depth, condition_on_mapper=self.condition_on_mapper)
+        self.S = StyleVectorizer(latent_dim, label_dim, style_depth, condition_on_mapper=self.condition_on_mapper, use_biases=use_biases)
         self.G = Generator(image_size, latent_dim, label_dim, network_capacity, channels=channels,
-                           condition_on_mapper=self.condition_on_mapper)
-        self.D = Discriminator(image_size, label_dim, network_capacity=network_capacity, channels=channels)
+                           condition_on_mapper=self.condition_on_mapper, use_biases=use_biases)
+        self.D = Discriminator(image_size, label_dim, network_capacity=network_capacity, channels=channels,
+                               label_epsilon=label_epsilon)
 
         self.SE = StyleVectorizer(latent_dim, label_dim, style_depth, condition_on_mapper=self.condition_on_mapper,
                                   use_biases=use_biases)
         self.GE = Generator(image_size, latent_dim, label_dim, network_capacity, channels=channels,
-                            condition_on_mapper=self.condition_on_mapper)
+                            condition_on_mapper=self.condition_on_mapper, use_biases=use_biases)
 
         set_requires_grad(self.SE, False)
         set_requires_grad(self.GE, False)
@@ -37,6 +38,7 @@ class StyleGAN2(nn.Module):
         self.G_opt = DiffGrad(generator_params, lr=self.lr, betas=(0.5, 0.9))
         self.D_opt = DiffGrad(self.D.parameters(), lr=self.lr, betas=(0.5, 0.9))
 
+        self.use_biases = use_biases
         self._init_weights()
         self.reset_parameter_averaging()
 
@@ -48,8 +50,9 @@ class StyleGAN2(nn.Module):
         for block in self.G.blocks:
             nn.init.zeros_(block.to_noise1.weight)
             nn.init.zeros_(block.to_noise2.weight)
-            nn.init.zeros_(block.to_noise1.bias)
-            nn.init.zeros_(block.to_noise2.bias)
+            if self.use_biases:
+                nn.init.zeros_(block.to_noise1.bias)
+                nn.init.zeros_(block.to_noise2.bias)
 
     def EMA(self):
         def update_moving_average(ma_model, current_model):
@@ -70,7 +73,7 @@ class StyleGAN2(nn.Module):
 
 class Generator(nn.Module):
     def __init__(self, image_size, latent_dim, label_dim, network_capacity=NETWORK_CAPACITY, channels=CHANNELS,
-                 condition_on_mapper=CONDITION_ON_MAPPER):
+                 condition_on_mapper=CONDITION_ON_MAPPER, use_biases=USE_BIASES):
         super().__init__()
         self.condition_on_mapper = condition_on_mapper
         self.image_size = image_size
@@ -93,7 +96,8 @@ class Generator(nn.Module):
                 out_chan,
                 upsample=not_first,
                 upsample_rgb=not_last,
-                channels=channels
+                channels=channels, 
+                use_biases=use_biases
             )
             self.blocks.append(block)
 
@@ -111,9 +115,11 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size, label_dim, network_capacity=NETWORK_CAPACITY, channels=CHANNELS):
+    def __init__(self, image_size, label_dim, network_capacity=NETWORK_CAPACITY, channels=CHANNELS,
+                 label_epsilon=LABEL_EPSILON):
         super().__init__()
 
+        self.label_epsilon=label_epsilon
         self.label_dim = label_dim
         num_layers = int(log2(image_size) - 1)
 
@@ -130,6 +136,9 @@ class Discriminator(nn.Module):
         self.to_logit = nn.Linear(2 * 2 * filters[-1], label_dim)
 
     def forward(self, x, labels):
+        labels = labels + self.label_epsilon
+        labels = labels / (1 + self.label_dim * self.label_epsilon)
+
         b, *_ = x.shape
         x = self.blocks(x)
         x = x.reshape(b, -1)
@@ -139,20 +148,20 @@ class Discriminator(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, channels=CHANNELS):
+    def __init__(self, latent_dim, input_channels, filters, upsample=True, upsample_rgb=True, channels=CHANNELS, use_biases=USE_BIASES):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
-        self.to_style1 = nn.Linear(latent_dim, input_channels)
-        self.to_noise1 = nn.Linear(1, filters)
+        self.to_style1 = nn.Linear(latent_dim, input_channels, bias=use_biases)
+        self.to_noise1 = nn.Linear(1, filters, bias=use_biases)
         self.conv1 = Conv2DMod(input_channels, filters, 3)
 
-        self.to_style2 = nn.Linear(latent_dim, filters)
-        self.to_noise2 = nn.Linear(1, filters)
+        self.to_style2 = nn.Linear(latent_dim, filters, bias=use_biases)
+        self.to_noise2 = nn.Linear(1, filters, bias=use_biases)
         self.conv2 = Conv2DMod(filters, filters, 3)
 
         self.activation = leaky_relu(0.2)
-        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, channels=channels)
+        self.to_rgb = RGBBlock(latent_dim, filters, upsample_rgb, channels=channels, use_biases=use_biases)
 
     def forward(self, x, prev_rgb, istyle, inoise):
         if self.upsample is not None:
@@ -198,10 +207,10 @@ class DiscriminatorBlock(nn.Module):
 
 
 class RGBBlock(nn.Module):
-    def __init__(self, latent_dim, input_channel, upsample, channels=CHANNELS):
+    def __init__(self, latent_dim, input_channel, upsample, channels=CHANNELS, use_biases=USE_BIASES):
         super().__init__()
         self.input_channel = input_channel
-        self.to_style = nn.Linear(latent_dim, input_channel)
+        self.to_style = nn.Linear(latent_dim, input_channel, bias=use_biases)
         self.conv = Conv2DMod(input_channel, channels, 1, demod=False)
 
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None

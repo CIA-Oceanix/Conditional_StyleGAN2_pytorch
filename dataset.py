@@ -1,5 +1,6 @@
 import os
 import glob
+import random
 
 import numpy as np
 import torch
@@ -49,7 +50,7 @@ class Dataset(data.Dataset):
         assert self.length, f"Didn't find any picture inside {folder}"
 
         self.transform = transforms.Compose([
-            # transforms.RandomHorizontalFlip(),
+            transforms.RandomHorizontalFlip(),
             transforms.Resize(image_size),
             transforms.ToTensor()
         ])
@@ -59,10 +60,12 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, index):
         label_index = index % self.label_number  # we select one label after another
+        if not (index // self.label_number)%len(self.path_keys[label_index]):
+            random.shuffle(self.path_keys[label_index])
+            
         path_keys = self.path_keys[label_index]
+            
         index = (index // self.label_number) % (len(path_keys))
-        # print('dataset.Dataset.__getitem__ l63:',
-        #       f"The index of the picture is {index} for label {self.labels[label_index]}")
 
         with Image.open(path_keys[index]) as image_file:
             img = self.transform(image_file)

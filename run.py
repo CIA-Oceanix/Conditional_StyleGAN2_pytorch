@@ -9,7 +9,7 @@ from CStyleGAN2_pytorch.trainer import Trainer
 from CStyleGAN2_pytorch.config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
     GRADIENT_BATCH_SIZE, NETWORK_CAPACITY, NUM_TRAIN_STEPS, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, \
-    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES
+    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES, LABEL_EPSILON
 
 
 # nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=512 --batch_size=1 --gpu=0 --name=TenGeoP-SARwv_512 > nohup_gpu0.out &
@@ -40,7 +40,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                       save_every=SAVE_EVERY,
                       evaluate_every=EVALUATE_EVERY,
                       condition_on_mapper=CONDITION_ON_MAPPER,
-                      use_biases=USE_BIASES):
+                      use_biases=USE_BIASES,
+                      label_epsilon=LABEL_EPSILON):
     """
     Train the conditional stylegan model on the data contained in a folder.
 
@@ -82,6 +83,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type condition_on_mapper: bool, optional
     :param use_biases: wether to use biases in the mapper or not
     :type use_biases: bool, optional
+    :param label_epsilon: epsilon for the discriminator
+    :type label_epsilon: float, optional
     :return:
     """
     gradient_accumulate_every = gradient_batch_size // gpu_batch_size
@@ -107,7 +110,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                   'save_every': save_every,
                   'evaluate_every': evaluate_every,
                   'condition_on_mapper': condition_on_mapper,
-                  'use_biases': use_biases
+                  'use_biases': use_biases,
+                  'label_epsilon': label_epsilon
                   }
     model = Trainer(**config)
 
