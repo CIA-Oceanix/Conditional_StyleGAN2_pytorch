@@ -66,7 +66,7 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :param learning_rate: learning rate for the training.
     :type learning_rate: float, optional
     :param gpu: name of the GPU to use, usually '0'.
-    :param gpu: int, optional
+    :type gpu: int, optional
     :param channels: number of channels of the input images.
     :type channels: str, optional
     :param path_length_regulizer_frequency: frequency of the path length regulizer.
@@ -75,15 +75,15 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type homogeneous_latent_space: bool, optional
     :param use_diversity_loss: penalize the generator by the lack of std for w.
     :type use_diversity_loss: bool, optional
-    :param save_every: number of (gradient) batch after which we save the network
+    :param save_every: number of (gradient) batch after which we save the network.
     :type save_every: int, optional
-    :param evaluate_every: number of (gradient) batch after which we evaluate the network
+    :param evaluate_every: number of (gradient) batch after which we evaluate the network.
     :type evaluate_every: int, optional
-    :param condition_on_mapper: wether to use the conditions in the mapper or the generator
+    :param condition_on_mapper: whether to use the conditions in the mapper or the generator.
     :type condition_on_mapper: bool, optional
-    :param use_biases: wether to use biases in the mapper or not
+    :param use_biases: whether to use biases in the mapper or not.
     :type use_biases: bool, optional
-    :param label_epsilon: epsilon for the discriminator
+    :param label_epsilon: epsilon for the discriminator.
     :type label_epsilon: float, optional
     :return:
     """

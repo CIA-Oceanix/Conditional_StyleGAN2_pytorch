@@ -1,14 +1,13 @@
 import os
 import json
 import fire
-import numpy as np
 from CStyleGAN2_pytorch.trainer import Trainer
 import torchvision
 
 root = 'models'
 name = "GochiUsa64_with_bias"
 
-def generate(mapper_input=None, labels=None, noises=None, use_mapper=True,truncation_trick=1.):
+def generate(use_mapper=True,truncation_trick=1.):
     with open(os.path.join(root, name, 'config.json'), 'r') as file:
         config = json.load(file)
         config['folder'] = config['folder'].replace("/homelocal/gpu1/pyve/acolin/data",

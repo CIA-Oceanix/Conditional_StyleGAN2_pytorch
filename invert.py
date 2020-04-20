@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import tqdm.auto as tqdm
 import numpy as np
 import PIL.Image

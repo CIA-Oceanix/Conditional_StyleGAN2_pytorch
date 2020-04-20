@@ -1,4 +1,4 @@
-from math import floor, log2
+from math import log2
 
 import torch
 from torch import nn

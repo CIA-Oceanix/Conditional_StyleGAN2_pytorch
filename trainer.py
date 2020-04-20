@@ -205,7 +205,7 @@ class Trainer():
         Set the latent vectors, the noises and the labels to evaluate, convert them to tensor, cuda and float if needed
 
         :param latents_to_evaluate: the latent vector to enter (either the mapper or the generator) network.
-                                    If None, they will be sampled from standart normal distribution.
+                                    If None, they will be sampled from standard normal distribution.
         :type latents_to_evaluate: torch.Tensor or np.ndarray, optional, default at None.
         :param noise_to_evaluate: the noise to enter the generator, convert them to tensor, cuda and float if needed.
                                   If None, they will be sampled from standard normal distribution.
@@ -246,7 +246,7 @@ class Trainer():
 
         if labels_to_evaluate is None:
             if self.labels_to_evaluate is None or reset:
-                self.labels_to_evaluate = np.array([np.eye(num_rows)[i % num_rows] for i in range(total)])
+                self.labels_to_evaluate = np.array([np.eye(self.label_dim)[i % self.label_dim] for i in range(total)])
         else:
             self.labels_to_evaluate = labels_to_evaluate
         if isinstance(self.labels_to_evaluate, np.ndarray):

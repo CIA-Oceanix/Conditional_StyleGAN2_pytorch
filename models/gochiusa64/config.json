@@ -1,0 +1,18 @@
+{
+    "batch_size": 32,
+    "channels": 3,
+    "condition_on_mapper": true,
+    "evaluate_every": 100,
+    "folder": ".",
+    "gradient_accumulate_every": 2,
+    "homogeneous_latent_space": true,
+    "image_size": 64,
+    "label_epsilon": 0.0,
+    "lr": 0.0002,
+    "name": "gochiusa64"
+    "network_capacity": 16,
+    "path_length_regulizer_frequency": 2,
+    "save_every": 250,
+    "use_biases": false,
+    "use_diversity_loss": false
+}

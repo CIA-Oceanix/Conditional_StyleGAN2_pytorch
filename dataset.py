@@ -50,7 +50,7 @@ class Dataset(data.Dataset):
         assert self.length, f"Didn't find any picture inside {folder}"
 
         self.transform = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomHorizontalFlip(),
             transforms.Resize(image_size),
             transforms.ToTensor()
         ])
