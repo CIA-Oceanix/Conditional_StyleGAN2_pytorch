@@ -9,26 +9,7 @@ from CStyleGAN2_pytorch.trainer import Trainer
 from CStyleGAN2_pytorch.config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
     GRADIENT_BATCH_SIZE, NETWORK_CAPACITY, NUM_TRAIN_STEPS, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, \
-    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES, LABEL_EPSILON
-
-
-# nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=512 --batch_size=1 --gpu=0 --name=TenGeoP-SARwv_512 > nohup_gpu0.out &
-# nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=256 --batch_size=2 --gpu=1 --name=TenGeoP-SARwv_256 > nohup_gpu1.out &
-# nohup python3.6 run.py "/homelocal/gpu1/pyve/acolin/data/chen/train" --image_size=128 --batch_size=8 --gpu=2 --name=TenGeoP-SARwv_128 > nohup_gpu2.out &
-# python run.py "E:\datasets\GochiUsa_128\train" --image_size=32 --batch_size=2 --name=GochiUsa_32
-# python run.py "E:\datasets\GochiUsa_128\train" --image_size=32 --batch_size=2 --name=GochiUsa_32 --condition_on_mapper=False
-# python run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_m --channels=1
-
-#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_m --homogenenous_latent_space=False --gpu=0  --gpu_batch_size=8 --channels=1
-#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_m_homogeneous --gpu=0   --gpu_batch_size=8 --channels=1
-#  python run.py "E:\datasets\mnist/train" --image_size=32 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --gpu_batch_size=8 --channels=1
-
-#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_m --homogenenous_latent_space=False --gpu=0  --gpu_batch_size=4 --channels=3
-#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_m_homogeneous --gpu=0   --gpu_batch_size=4 --channels=3
-#  python run.py "E:\datasets\GochiUsa_128/train" --image_size=64 --name=gochiusa64_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --gpu_batch_size=4 --channels=3
-
-#  nohup python3.6 run.py "E:\datasets\mnist\train" --image_size=32 --batch_size=2 --name=mnist_condition_on_g --condition_on_mapper=False --homogenenous_latent_space=False --gpu=0 --batch_size=32 --channels=1 > nohup_gpu2.out &
-
+    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES, LABEL_EPSILON, LATENT_DIM
 
 def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, image_size=IMAGE_SIZE,
                       gpu_batch_size=GPU_BATCH_SIZE, gradient_batch_size=GRADIENT_BATCH_SIZE,
@@ -41,7 +22,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                       evaluate_every=EVALUATE_EVERY,
                       condition_on_mapper=CONDITION_ON_MAPPER,
                       use_biases=USE_BIASES,
-                      label_epsilon=LABEL_EPSILON):
+                      label_epsilon=LABEL_EPSILON,
+                      latent_dim=LATENT_DIM,):
     """
     Train the conditional stylegan model on the data contained in a folder.
 
@@ -85,6 +67,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type use_biases: bool, optional
     :param label_epsilon: epsilon for the discriminator.
     :type label_epsilon: float, optional
+    :param latent_dim: size of the latent vector.
+    :type latent_dim: int, optional
     :return:
     """
     gradient_accumulate_every = gradient_batch_size // gpu_batch_size
@@ -111,7 +95,8 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                   'evaluate_every': evaluate_every,
                   'condition_on_mapper': condition_on_mapper,
                   'use_biases': use_biases,
-                  'label_epsilon': label_epsilon
+                  'label_epsilon': label_epsilon,
+                  'latent_dim': latent_dim
                   }
     model = Trainer(**config)
 

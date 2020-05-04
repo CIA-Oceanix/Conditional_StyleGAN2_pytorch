@@ -18,7 +18,7 @@ from CStyleGAN2_pytorch.misc import gradient_penalty, image_noise, noise_list, m
 from CStyleGAN2_pytorch.config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, CHANNELS, \
     CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD, \
-    USE_BIASES, LABEL_EPSILON
+    USE_BIASES, LABEL_EPSILON, LATENT_DIM, NETWORK_CAPACITY
 
 
 class Trainer():
@@ -28,6 +28,7 @@ class Trainer():
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
                  gradient_accumulate_every=GRADIENT_ACCUMULATE_EVERY, moving_average_start=MOVING_AVERAGE_START,
                  moving_average_period=MOVING_AVERAGE_PERIOD, use_biases=USE_BIASES, label_epsilon=LABEL_EPSILON,
+                 latent_dim=LATENT_DIM, network_capacity=NETWORK_CAPACITY,
                  *args, **kwargs):
         self.condition_on_mapper = condition_on_mapper
         self.folder = folder
@@ -39,7 +40,7 @@ class Trainer():
         self.name = name
         self.GAN = StyleGAN2(lr=lr, image_size=image_size, label_dim=self.label_dim, channels=channels,
                              condition_on_mapper=self.condition_on_mapper, label_epsilon=label_epsilon,
-                             use_biases=use_biases,
+                             use_biases=use_biases, latent_dim=latent_dim, network_capacity=network_capacity,
                              *args, **kwargs)
         self.GAN.cuda()
 
@@ -235,18 +236,22 @@ class Trainer():
                 self.latents_to_evaluate = noise_list(total, self.GAN.G.num_layers, latent_dim)
         else:
             self.latents_to_evaluate = latents_to_evaluate
+        if isinstance(self.latents_to_evaluate, np.ndarray):
+            self.latents_to_evaluate = torch.from_numpy(self.latents_to_evaluate).cuda().float()
 
         if noise_to_evaluate is None:
             if self.noise_to_evaluate is None or reset:
                 self.noise_to_evaluate = image_noise(total, self.GAN.G.image_size)
         else:
             self.noise_to_evaluate = noise_to_evaluate
-        if isinstance(self.latents_to_evaluate, np.ndarray):
+        if isinstance(self.noise_to_evaluate, np.ndarray):
             self.noise_to_evaluate = torch.from_numpy(self.noise_to_evaluate).cuda().float()
 
         if labels_to_evaluate is None:
             if self.labels_to_evaluate is None or reset:
                 self.labels_to_evaluate = np.array([np.eye(self.label_dim)[i % self.label_dim] for i in range(total)])
+        elif isinstance(labels_to_evaluate, int):
+            self.labels_to_evaluate = np.array([np.eye(self.label_dim)[labels_to_evaluate] for _ in range(total)])
         else:
             self.labels_to_evaluate = labels_to_evaluate
         if isinstance(self.labels_to_evaluate, np.ndarray):

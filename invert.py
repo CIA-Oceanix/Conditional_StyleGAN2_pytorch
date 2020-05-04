@@ -15,6 +15,7 @@ def optimizer_step(generator, optimizer, loss_function, target, parameters):
     optimizer.zero_grad()
 
     output = generator(*parameters)
+    output = output/output.max()
 
     loss = loss_function(output, target)
     loss.backward()
@@ -22,17 +23,24 @@ def optimizer_step(generator, optimizer, loss_function, target, parameters):
     return loss.item(), output
 
 
-def latent_vector_optimization(generator, mapper, image_filename, label, learning_rate=1e-1, steps=1000,
+def latent_vector_optimization(generator, mapper, image_filename, label, learning_rate=1e-2, steps=1000,
                                use_tqdm=False, optimize_on=(True, False, False)):
     im = PIL.Image.open(image_filename)
     im = im.resize((generator.image_size, generator.image_size))
-    target = torch.from_numpy(np.expand_dims(np.expand_dims(np.array(im) / 255, axis=0), axis=0)).cuda().float()
+    
+    im = np.array(im)/255
+    if len(im.shape) == 3:
+        im = np.transpose(im, [2, 0, 1])
+    else:
+        im = np.expand_dims(im, axis=0)
+    im = np.expand_dims(im, axis=0)
+    
+    target = torch.from_numpy(im).cuda().float()
 
-    label_array = np.expand_dims(get_hot_one_encoded(label), axis=0)
+    label_array = np.expand_dims(get_hot_one_encoded(label, index_max=mapper.label_dim), axis=0)
     label = torch.from_numpy(label_array).cuda().float()
 
-    noise = torch.from_numpy(
-        np.random.random((1, generator.image_size, generator.image_size, 1))).cuda().float()
+    noise = torch.from_numpy(np.random.random((1, generator.image_size, generator.image_size, 1))).cuda().float()
     latent = torch.from_numpy(np.random.random((1, generator.latent_dim))).cuda().float()
     latent = mapper(latent, label)
     latent = torch.stack([latent for _ in range(generator.num_layers)], axis=1)
@@ -41,7 +49,7 @@ def latent_vector_optimization(generator, mapper, image_filename, label, learnin
     var_latent = torch.autograd.Variable(latent.data, requires_grad=True)
     var_label = torch.autograd.Variable(label.data, requires_grad=True)
 
-    optimizer = torch.optim.SGD([variable for use, variable in zip(optimize_on, [var_latent, var_noise, ])],
+    optimizer = torch.optim.SGD([variable for use, variable in zip(optimize_on, [var_latent, var_noise, var_label])],
                                 lr=learning_rate)
 
     loss_function = torch.nn.MSELoss(reduction='sum')
@@ -50,8 +58,5 @@ def latent_vector_optimization(generator, mapper, image_filename, label, learnin
     for _ in steps:
         loss, output = optimizer_step(generator, optimizer, loss_function, target, (var_latent, var_noise, var_label))
 
-    return (var_latent.cpu().detach().numpy(),
-            var_noise.cpu().detach().numpy(),
-            var_label.cpu().detach().numpy()),\
-           output.cpu().detach().numpy()[0, 0], \
+    return (var_latent, var_noise, label), np.transpose(output.cpu().detach().numpy()[0], [1, 2, 0]), \
            loss

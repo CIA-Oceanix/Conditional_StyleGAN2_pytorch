@@ -214,7 +214,7 @@ class RGBBlock(nn.Module):
         self.conv = Conv2DMod(input_channel, channels, 1, demod=False)
 
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
-        # self.normalize = nn.Sigmoid()
+        self.normalize = nn.Sigmoid()
 
     def forward(self, x, prev_rgb, istyle):
         style = self.to_style(istyle)
@@ -225,6 +225,7 @@ class RGBBlock(nn.Module):
 
         if self.upsample is not None:
             x = self.upsample(x)
+        #x = self.normalize(x)
 
         return x
 
