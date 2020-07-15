@@ -4,7 +4,7 @@ This repository is an heavily modified/refactored version of [lucidrains](https:
 
 The original version of [StyleGAN2](https://github.com/NVlabs/stylegan2) can be found [here](https://arxiv.org/abs/1912.04958).
 
-Check [our pdf]() for details about the conditioning.
+Check [our pdf](https://github.com/CIA-Oceanix/Conditional_StyleGAN2_pytorch/blob/master/A_Conditional_Pytorch_StyleGan_V2.pdf) for details about the conditioning.
 
 ## Abstract
 
