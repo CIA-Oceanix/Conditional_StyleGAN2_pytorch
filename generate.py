@@ -5,16 +5,16 @@ from CStyleGAN2_pytorch.trainer import Trainer
 import torchvision
 
 root = 'models'
-name = "TenGeoP-SARwv_256"
+NAME = "TenGeoP-SARwv_256"
 
-images_to_generate = 20
+IMAGES_TO_GENERATE = 20
 
 
-def generate(use_mapper=True, truncation_trick=1.):
+def generate(name=NAME, images_to_generate=IMAGES_TO_GENERATE, use_mapper=True, truncation_trick=1.):
     with open(os.path.join(root, name, 'config.json'), 'r') as file:
         config = json.load(file)
     model = Trainer(**config)
-    model.load(199, root=root)
+    model.load(-1, root=root)
 
     class_number = len(os.listdir(config['folder']))
     for i in range(images_to_generate):
