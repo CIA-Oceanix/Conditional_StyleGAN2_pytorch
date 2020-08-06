@@ -3,6 +3,7 @@ from random import random
 from shutil import rmtree
 from pathlib import Path
 import numpy as np
+import math
 
 import torch
 from torch.utils import data
@@ -10,15 +11,15 @@ import torch.nn.functional as F
 
 import torchvision
 
-from CStyleGAN2_pytorch.dataset import cycle, Dataset
-from CStyleGAN2_pytorch.StyleGAN2 import StyleGAN2
-from CStyleGAN2_pytorch.misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
+from dataset import cycle, Dataset
+from StyleGAN2 import StyleGAN2
+from misc import gradient_penalty, image_noise, noise_list, mixed_list, latent_to_w, \
     evaluate_in_chunks, styles_def_to_tensor, EMA
 
-from CStyleGAN2_pytorch.config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, \
+from config import RESULTS_DIR, MODELS_DIR, EPSILON, LOG_FILENAME, GPU_BATCH_SIZE, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, EVALUATE_EVERY, CHANNELS, \
     CONDITION_ON_MAPPER, MIXED_PROBABILITY, GRADIENT_ACCUMULATE_EVERY, MOVING_AVERAGE_START, MOVING_AVERAGE_PERIOD, \
-    USE_BIASES, LABEL_EPSILON, LATENT_DIM, NETWORK_CAPACITY
+    USE_BIASES, LABEL_EPSILON, LATENT_DIM, NETWORK_CAPACITY, SWAP_NOISE, OCCLUDE_NOISE
 
 
 class Trainer():
@@ -28,7 +29,8 @@ class Trainer():
                  save_every=SAVE_EVERY, evaluate_every=EVALUATE_EVERY, condition_on_mapper=CONDITION_ON_MAPPER,
                  gradient_accumulate_every=GRADIENT_ACCUMULATE_EVERY, moving_average_start=MOVING_AVERAGE_START,
                  moving_average_period=MOVING_AVERAGE_PERIOD, use_biases=USE_BIASES, label_epsilon=LABEL_EPSILON,
-                 latent_dim=LATENT_DIM, network_capacity=NETWORK_CAPACITY,
+                 latent_dim=LATENT_DIM, network_capacity=NETWORK_CAPACITY, swap_noise=SWAP_NOISE,
+                 occlude_noise=OCCLUDE_NOISE,
                  *args, **kwargs):
         self.condition_on_mapper = condition_on_mapper
         self.folder = folder
@@ -56,7 +58,7 @@ class Trainer():
         self.moving_average_start = moving_average_start
         self.moving_average_period = moving_average_period
 
-        self.dataset = Dataset(folder, image_size)
+        self.dataset = Dataset(folder, image_size, occlude_noise=occlude_noise)
         self.loader = cycle(data.DataLoader(self.dataset, num_workers=0, batch_size=batch_size,
                                             drop_last=True, shuffle=False, pin_memory=False))
         self.gradient_accumulate_every = gradient_accumulate_every
@@ -77,6 +79,8 @@ class Trainer():
 
         self.evaluate_in_chunks = evaluate_in_chunks
         self.styles_def_to_tensor = styles_def_to_tensor
+
+        self.swap_noise = swap_noise
 
     def train(self):
         self.GAN.train()
@@ -101,11 +105,11 @@ class Trainer():
         inputs = []
 
         for i in range(self.gradient_accumulate_every):
-            image_batch, label_batch = next(self.loader)
+            (noise_batch, image_batch), label_batch = next(self.loader)
 
             get_latents_fn = mixed_list if random() < self.mixed_prob else noise_list
             style = np.array(get_latents_fn(batch_size, num_layers, latent_dim))
-            noise = image_noise(batch_size, image_size)
+            noise = image_noise(batch_size, image_size, img_batch=noise_batch, swap_noise=self.swap_noise)
             inputs.append((style, noise, label_batch))
 
             w_space = latent_to_w(self.GAN.S, style, label_batch)
@@ -114,12 +118,14 @@ class Trainer():
             generated_images = self.GAN.G(w_styles, noise, label_batch)
             fake_output = self.GAN.D(generated_images.clone().detach(), label_batch)
 
+            similarity_loss = ((noise[noise != 0] - generated_images[noise != 0]) ** 2).mean() * 0.
+
             image_batch = image_batch.cuda()
             image_batch.requires_grad_()
             real_output = self.GAN.D(image_batch, label_batch)
             divergence = (F.relu(1 + real_output) + F.relu(1 - fake_output))
             divergence = divergence.mean()
-            disc_loss = divergence
+            disc_loss = divergence + similarity_loss
 
             if apply_gradient_penalty:
                 gp = gradient_penalty(image_batch, real_output, label_batch)
@@ -192,11 +198,13 @@ class Trainer():
             self.save(self.steps // self.save_every)
 
         if not self.steps % self.evaluate_every:
-            self.set_evaluation_parameters()
+            im_index = self.steps // self.evaluate_every
+            self.set_evaluation_parameters(noise_to_evaluate=noise)
             generated_images, average_generated_images = self.evaluate()
-            self.save_images(generated_images, f'{self.steps // self.evaluate_every}.png')
+            self.save_images(generated_images, f'{im_index}.png')
+            self.save_images(noise, f'{im_index}-noise.png')
+            self.save_images(average_generated_images, f'{im_index}-EMA.png')
             self.save_images(generated_images, 'fakes.png')
-            self.save_images(average_generated_images, f'{self.steps // self.evaluate_every}-EMA.png')
         self.steps += 1
         self.av = None
 
@@ -265,10 +273,10 @@ class Trainer():
             if use_mapper:
                 latents = latent_to_w(stylizer, latents, labels)
                 latents = styles_def_to_tensor(latents)
-                
-                latents_mean = torch.mean(latents, dim=(1,2))
-                latents =  truncation_trick*(latents - latents_mean[:, None, None]) + latents_mean[:, None, None]
-                
+
+                latents_mean = torch.mean(latents, dim=(1, 2))
+                latents = truncation_trick * (latents - latents_mean[:, None, None]) + latents_mean[:, None, None]
+
             self.last_latents = latents  # for inspection purpose
 
             generated_images = self.evaluate_in_chunks(self.batch_size, generator, latents, noise, labels)
@@ -290,12 +298,12 @@ class Trainer():
     def draw_reals(self):
         nrows = 8
         reals_filename = str(RESULTS_DIR / self.name / 'reals.png')
+
+        n_batchs = math.ceil(self.label_dim * nrows / self.batch_size)
         images = [image
-                  for images, labels in [next(self.loader)
-                                         for _ in range(self.label_dim * nrows // self.batch_size)]
-                  for image in images]
-        images = images[:len(images) // nrows * nrows]
-        torchvision.utils.save_image(images, reals_filename, nrow=len(images) // nrows)
+                  for (occluded_images, images), labels in [next(self.loader) for _ in range(n_batchs)]
+                  for image in occluded_images]
+        torchvision.utils.save_image(images, reals_filename, nrow=self.label_dim)
         print(f'\nMosaic of real images created at {reals_filename}\n')
 
     def print_log(self, batch_id):

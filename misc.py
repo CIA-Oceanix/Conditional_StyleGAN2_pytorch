@@ -23,7 +23,7 @@ def gradient_penalty(images, output, labels, weight=10):
     return weight * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
 
 
-def image_noise(n, im_size):
+def image_noise(n, im_size, img_batch=None, swap_noise=False):
     """
     Create random noise of shape (n, im_size, im_size, 1) following the uniform distribution between 0 and 1.
 
@@ -33,7 +33,11 @@ def image_noise(n, im_size):
     :type im_size: int
     :return: a tensor of shape (n, im_size, im_size, 1) following the uniform distribution between 0 and 1.
     """
-    return torch.empty(n, im_size, im_size, 1).uniform_(0., 1.).cuda()
+    if img_batch is None:
+        return torch.empty(n, im_size, im_size, 1).uniform_(0., 1.).cuda()
+    if swap_noise:
+        return img_batch[torch.randperm(n)].cuda()
+    return img_batch.cuda()
 
 
 def noise(batch_size, latent_dim):

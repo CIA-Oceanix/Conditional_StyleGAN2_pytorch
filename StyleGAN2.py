@@ -5,8 +5,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch_optimizer import DiffGrad
 
-from CStyleGAN2_pytorch.misc import EMA, set_requires_grad
-from CStyleGAN2_pytorch.config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, \
+from misc import EMA, set_requires_grad
+from config import EPSILON, LATENT_DIM, STYLE_DEPTH, NETWORK_CAPACITY, LEARNING_RATE, CHANNELS, \
     CONDITION_ON_MAPPER, USE_BIASES, LABEL_EPSILON
 
 
@@ -153,11 +153,11 @@ class GeneratorBlock(nn.Module):
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
         self.to_style1 = nn.Linear(latent_dim, input_channels, bias=use_biases)
-        self.to_noise1 = nn.Linear(1, filters, bias=use_biases)
+        self.to_noise1 = nn.Linear(input_channels, filters, bias=use_biases)
         self.conv1 = Conv2DMod(input_channels, filters, 3)
 
         self.to_style2 = nn.Linear(latent_dim, filters, bias=use_biases)
-        self.to_noise2 = nn.Linear(1, filters, bias=use_biases)
+        self.to_noise2 = nn.Linear(input_channels, filters, bias=use_biases)
         self.conv2 = Conv2DMod(filters, filters, 3)
 
         self.activation = leaky_relu(0.2)
@@ -167,7 +167,9 @@ class GeneratorBlock(nn.Module):
         if self.upsample is not None:
             x = self.upsample(x)
 
-        inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        #inoise = inoise[:, :x.shape[2], :x.shape[3], :]
+        inoise = nn.functional.interpolate(inoise, size=(x.shape[2], x.shape[3]), mode='bilinear')
+        inoise = inoise.permute((0, 3, 2, 1))
         noise1 = self.to_noise1(inoise).permute((0, 3, 2, 1))
         noise2 = self.to_noise2(inoise).permute((0, 3, 2, 1))
 

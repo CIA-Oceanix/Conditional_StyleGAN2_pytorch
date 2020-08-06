@@ -4,12 +4,14 @@ from tqdm import tqdm
 import json
 from pathlib import Path
 
-from CStyleGAN2_pytorch.trainer import Trainer
+from trainer import Trainer
 
-from CStyleGAN2_pytorch.config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
+from config import FOLDER, NAME, NEW, LOAD_FROM, GPU, IMAGE_SIZE, CHANNELS, GPU_BATCH_SIZE, \
     GRADIENT_BATCH_SIZE, NETWORK_CAPACITY, NUM_TRAIN_STEPS, LEARNING_RATE, \
     PATH_LENGTH_REGULIZER_FREQUENCY, HOMOGENEOUS_LATENT_SPACE, USE_DIVERSITY_LOSS, SAVE_EVERY, \
-    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES, LABEL_EPSILON, LATENT_DIM
+    EVALUATE_EVERY, CONDITION_ON_MAPPER, MODELS_DIR, USE_BIASES, LABEL_EPSILON, LATENT_DIM, \
+    SWAP_NOISE, OCCLUDE_NOISE
+
 
 def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, image_size=IMAGE_SIZE,
                       gpu_batch_size=GPU_BATCH_SIZE, gradient_batch_size=GRADIENT_BATCH_SIZE,
@@ -23,7 +25,9 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
                       condition_on_mapper=CONDITION_ON_MAPPER,
                       use_biases=USE_BIASES,
                       label_epsilon=LABEL_EPSILON,
-                      latent_dim=LATENT_DIM,):
+                      latent_dim=LATENT_DIM,
+                      swap_noise=SWAP_NOISE,
+                      occlude_noise=OCCLUDE_NOISE):
     """
     Train the conditional stylegan model on the data contained in a folder.
 
@@ -69,6 +73,10 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
     :type label_epsilon: float, optional
     :param latent_dim: size of the latent vector.
     :type latent_dim: int, optional
+    :param swap_noise: whether to randomly swap the input noise.
+    :type swap_noise: bool, optional
+    :param occlude_noise: whether to occlude the input noise.
+    :type swap_noise: bool, optional
     :return:
     """
     gradient_accumulate_every = gradient_batch_size // gpu_batch_size
@@ -80,24 +88,27 @@ def train_from_folder(folder=FOLDER, name=NAME, new=NEW, load_from=LOAD_FROM, im
         with open(json_path, 'r') as file:
             config = json.load(file)
     else:
-        config = {'name': name,
-                  'folder': folder,
-                  'batch_size': gpu_batch_size,
-                  'gradient_accumulate_every': gradient_accumulate_every,
-                  'image_size': image_size,
-                  'network_capacity': network_capacity,
-                  'lr': learning_rate,
-                  'channels': channels,
-                  'path_length_regulizer_frequency': path_length_regulizer_frequency,
-                  'homogeneous_latent_space': homogeneous_latent_space,
-                  'use_diversity_loss': use_diversity_loss,
-                  'save_every': save_every,
-                  'evaluate_every': evaluate_every,
-                  'condition_on_mapper': condition_on_mapper,
-                  'use_biases': use_biases,
-                  'label_epsilon': label_epsilon,
-                  'latent_dim': latent_dim
-                  }
+        config = {
+            'name': name,
+            'folder': folder,
+            'batch_size': gpu_batch_size,
+            'gradient_accumulate_every': gradient_accumulate_every,
+            'image_size': image_size,
+            'network_capacity': network_capacity,
+            'lr': learning_rate,
+            'channels': channels,
+            'path_length_regulizer_frequency': path_length_regulizer_frequency,
+            'homogeneous_latent_space': homogeneous_latent_space,
+            'use_diversity_loss': use_diversity_loss,
+            'save_every': save_every,
+            'evaluate_every': evaluate_every,
+            'condition_on_mapper': condition_on_mapper,
+            'use_biases': use_biases,
+            'label_epsilon': label_epsilon,
+            'latent_dim': latent_dim,
+            'swap_noise': swap_noise,
+            'occlude_noise': occlude_noise,
+        }
     model = Trainer(**config)
 
     if not new:

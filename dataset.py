@@ -9,7 +9,7 @@ from torchvision import transforms
 
 from PIL import Image
 
-from CStyleGAN2_pytorch.config import EXTS
+from config import EXTS, OCCLUDE_NOISE
 
 
 def cycle(iterable):
@@ -26,7 +26,7 @@ class Dataset(data.Dataset):
     The Dataset object is used to read files from a given folder and generate both the labels and the tensor.
     """
 
-    def __init__(self, folder, image_size):
+    def __init__(self, folder, image_size, occlude_noise=OCCLUDE_NOISE):
         """
         Initialize the Dataset.
 
@@ -50,25 +50,45 @@ class Dataset(data.Dataset):
         assert self.length, f"Didn't find any picture inside {folder}"
 
         self.transform = transforms.Compose([
-            #transforms.RandomHorizontalFlip(),
+            transforms.RandomHorizontalFlip(),
             transforms.Resize(image_size),
             transforms.ToTensor()
         ])
+        self.occlude_noise = occlude_noise
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, index):
         label_index = index % self.label_number  # we select one label after another
-        if not (index // self.label_number)%len(self.path_keys[label_index]):
+        if not (index // self.label_number) % len(self.path_keys[label_index]):
             random.shuffle(self.path_keys[label_index])
-            
+
         path_keys = self.path_keys[label_index]
-            
+
         index = (index // self.label_number) % (len(path_keys))
 
         with Image.open(path_keys[index]) as image_file:
             img = self.transform(image_file)
 
+        noise_input = img.clone() if not self.occlude_noise else occlude(img.clone())
+
         label = torch.from_numpy(np.eye(self.label_number)[label_index]).cuda().float()
-        return img, label
+        return (noise_input, img), label
+
+
+def occlude(img):
+    mode = np.random.randint(0, 6)
+    if mode == 0:
+        img[:, :, :img.shape[2] // 2] = 0
+    elif mode == 1:
+        img[:, :img.shape[1] // 2] = 0
+    elif mode == 2:
+        img[:, :, img.shape[2] // 2:] = 0
+    elif mode == 3:
+        img[:, img.shape[1] // 2:] = 0
+    elif mode == 4:
+        img[:, img.shape[1] // 4:-img.shape[1] // 4] = 0
+    elif mode == 5:
+        img[:, :, img.shape[2] // 4:-img.shape[2] // 4] = 0
+    return img
